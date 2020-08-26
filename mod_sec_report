@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+
+import sys
+import argparse
+import json
+import codecs
+import shlex
+import datetime
+import gzip
+from jinja2 import Template
+
+
+def parse_modsec_error_msg(err_msg):
+    """
+    Parse a single error message from a modsec log line.
+    """
+    in_kv = False
+    parsed = {
+        "main_msg": "??"
+    }
+    prev_token = None
+    key = None
+    value = ""
+
+    lexer = shlex.shlex(err_msg)
+
+    for token in lexer:
+        if prev_token == "[":
+            if value:
+                parsed["main_msg"] = value
+                value = ""
+            key = token
+            in_kv = True
+        elif token == "]":
+            parsed[key] = value.strip('"')
+            key = None
+            in_kv = False
+            value = ""
+        elif token == "[":
+            pass
+        else:
+            if in_kv:
+                value += token
+            else:
+                value += token + " "
+
+        prev_token = token
+
+    if value:
+        parsed["main_msg"] += value
+
+    if not "msg" in parsed:
+        parsed["msg"] = parsed["main_msg"]
+
+    return parsed
+
+
+def parse_modsec_line(line):
+    """
+    Parse a single line from a mod_security log file in JSON format.
+    """
+    entry = json.loads(line)
+
+    transaction_dt = entry["transaction"]["time"]
+    entry["transaction"]["time_parsed"] = datetime.datetime.strptime(transaction_dt, "%d/%b/%Y:%H:%M:%S %z")
+
+    if "body" in entry["request"] and len(entry["request"]["body"]) > 0:
+        entry["request"]["body"] = [entry["request"]["body"][0].encode("ascii", errors="ignore").decode("utf8")]
+
+    entry["errors"] = []
+    for err_msg in entry["audit_data"].get("error_messages", []):
+        entry["errors"].append(parse_modsec_error_msg(err_msg))
+
+    return entry
+
+
+def parse_modsec_file(path):
+    parsed_log_lines = []
+
+    if path.endswith(".gz"):
+        fh = gzip.open(path, "rt", errors="replace", encoding="utf-8")
+    else:
+        fh = open(path, "r", errors="replace", encoding="utf-8")
+
+    for line in fh:
+        parsed_log_lines.append(parse_modsec_line(line))
+
+    fh.close()
+
+    return parsed_log_lines
+
+
+def output(entries):
+    with open("mod_sec_report.tpl") as file_:
+        template = Template(file_.read())
+    print(template.render(entries=entries))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ModSecurity Report generator")
+    parser.add_argument("logfiles",
+                        metavar="LOGFILES",
+                        type=str,
+                        nargs="+",
+                        help="ModSec log files in JSON fmt")
+
+    args = parser.parse_args()
+
+    entries = []
+    for logfile in args.logfiles:
+        entries.extend(parse_modsec_file(logfile))
+
+    output(sorted(entries, key=lambda entry: entry["transaction"]["time_parsed"]))

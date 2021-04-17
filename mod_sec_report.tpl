@@ -42,8 +42,8 @@
         margin-top: 1em;
         padding: 1em;
         font-family: monospace;
-        overflow-wrap: break-word;
-        overflow: auto;
+        overflow-x: auto;
+        width: 1024px;
     }
 </style>
 </head>

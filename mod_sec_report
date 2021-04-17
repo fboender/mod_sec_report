@@ -82,8 +82,13 @@ def parse_modsec_file(path):
     else:
         fh = open(path, "r", errors="replace", encoding="utf-8")
 
+    line_cnt = 0
     for line in fh:
-        parsed_log_lines.append(parse_modsec_line(line))
+        line_cnt += 1
+        try:
+            parsed_log_lines.append(parse_modsec_line(line))
+        except Exception as err:
+            sys.stderr.write("Couldn't parse line {} of {}. Skipping. Error = {}\n".format(line_cnt, path, err))
 
     fh.close()
 

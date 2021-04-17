@@ -128,7 +128,7 @@
                             <th>Header</th>
                             <th>Value</th>
                         </tr>
-                        {% for header_k, header_v in entry["response"]["headers"].items() %}
+                        {% for header_k, header_v in entry["response"].get("headers", {}).items() %}
                             <tr>
                                 <td><tt>{{ header_k|e }}</tt></td>
                                 <td><tt>{{ header_v|e }}</tt></td>
